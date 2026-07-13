@@ -1,0 +1,74 @@
+# plugin_echo Build Instructions
+
+## Prerequisites
+
+- CMake 3.10+
+- C++17 compiler
+  - Windows: MSVC or MinGW-w64 (posix thread model)
+  - Linux: GCC or Clang
+
+## Build Commands
+
+### Windows + MSVC
+```bash
+cmake --preset msvc
+cmake --build build --config Release
+```
+
+### Windows + MinGW (posix)
+```bash
+cmake --preset mingw-posix
+cmake --build build
+```
+
+### Linux
+```bash
+mkdir build && cd build
+cmake ..
+make
+```
+
+## Output
+
+- Windows: `build/bin/plugin_echo.dll`
+- Linux: `build/lib/libplugin_echo.so`
+
+## SDK Structure
+
+```
+sdk/
+├── include/           # Header files
+│   ├── luo9_sdk.h
+│   ├── bot.h
+│   ├── bus.h
+│   ├── command.h
+│   ├── message.h
+│   ├── payload.h
+│   ├── pattern.h
+│   └── version.h
+└── lib/
+    ├── windows/
+    │   ├── luo9_sdk_cpp.lib        # SDK static lib (MSVC)
+    │   ├── libluo9_sdk_cpp_mingw.a # SDK static lib (MinGW)
+    │   ├── luo9_core.lib           # Core import lib
+    │   └── luo9_core.dll           # Core runtime
+    └── linux/
+        ├── libluo9_sdk_cpp.a       # SDK static lib
+        └── libluo9_core.so         # Core shared lib
+```
+
+## Usage Example
+
+```cpp
+#include "luo9_sdk.h"
+
+using namespace luo9::command;
+using namespace luo9::bot;
+
+void handle_msg(uint64_t group_id, const std::string& msg) {
+    auto cmd = Command::parse(msg, "echo", PrefixMode::Optional('/'));
+    if (!cmd.empty()) {
+        send_group_msg(group_id, cmd.args_raw());
+    }
+}
+```
