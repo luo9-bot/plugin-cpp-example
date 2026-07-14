@@ -1,4 +1,18 @@
 #include "main.h"
+#include <windows.h>
+
+#ifdef _WIN32
+#define DEBUG_LOG(msg) do { \
+    OutputDebugStringA(msg); \
+    fprintf(stderr, "%s\n", msg); \
+    fflush(stderr); \
+} while(0)
+#else
+#define DEBUG_LOG(msg) do { \
+    fprintf(stderr, "%s\n", msg); \
+    fflush(stderr); \
+} while(0)
+#endif
 
 using namespace luo9::command;
 using namespace luo9::bus;
@@ -6,13 +20,17 @@ using namespace luo9::bus;
 // Message handlers
 
 void handle_private_msg(uint64_t user_id, const std::string& msg) {
+    DEBUG_LOG(("[plugin_echo] handle_private_msg: user=" + std::to_string(user_id) + " msg=" + msg).c_str());
+    
     auto reply = [user_id](const std::string& text) {
+        DEBUG_LOG(("[plugin_echo] Sending private reply to " + std::to_string(user_id) + ": " + text).c_str());
         luo9::bot::send_private_msg(user_id, text);
     };
 
     // /echo <text>
     auto cmd = Command::parse(msg, "echo", PrefixMode::Required('/'));
     if (!cmd.empty()) {
+        DEBUG_LOG("[plugin_echo] Matched /echo command");
         reply(cmd.args_raw());
         return;
     }
@@ -20,22 +38,29 @@ void handle_private_msg(uint64_t user_id, const std::string& msg) {
     // /task start <name> <cron> [payload] | /task end <name>
     cmd = Command::parse(msg, "task", PrefixMode::Required('/'));
     if (!cmd.empty()) {
+        DEBUG_LOG("[plugin_echo] Matched /task command");
         cmd.on("start", [&reply](const std::vector<std::string>& args) {
             handle_task_start(reply, args);
         }).on("end", [&reply](const std::vector<std::string>& args) {
             handle_task_end(reply, args);
         });
     }
+    
+    DEBUG_LOG("[plugin_echo] No command matched");
 }
 
 void handle_group_msg(uint64_t group_id, uint64_t _user_id, const std::string& msg) {
+    DEBUG_LOG(("[plugin_echo] handle_group_msg: group=" + std::to_string(group_id) + " user=" + std::to_string(_user_id) + " msg=" + msg).c_str());
+    
     auto reply = [group_id](const std::string& text) {
+        DEBUG_LOG(("[plugin_echo] Sending group reply to " + std::to_string(group_id) + ": " + text).c_str());
         luo9::bot::send_group_msg(group_id, text);
     };
 
     // /echo <text>
     auto cmd = Command::parse(msg, "echo", PrefixMode::Required('/'));
     if (!cmd.empty()) {
+        DEBUG_LOG("[plugin_echo] Matched /echo command");
         reply(cmd.args_raw());
         return;
     }
@@ -43,17 +68,21 @@ void handle_group_msg(uint64_t group_id, uint64_t _user_id, const std::string& m
     // /task start <name> <cron> [payload] | /task end <name>
     cmd = Command::parse(msg, "task", PrefixMode::Required('/'));
     if (!cmd.empty()) {
+        DEBUG_LOG("[plugin_echo] Matched /task command");
         cmd.on("start", [&reply](const std::vector<std::string>& args) {
             handle_task_start(reply, args);
         }).on("end", [&reply](const std::vector<std::string>& args) {
             handle_task_end(reply, args);
         });
     }
+    
+    DEBUG_LOG("[plugin_echo] No command matched");
 }
 
 // Event handlers
 
 void handle_meta_event(const luo9::payload::MetaEventPayload& ev) {
+    DEBUG_LOG(("[plugin_echo] handle_meta_event: type=" + std::to_string(static_cast<int>(ev.meta_event_type))).c_str());
     switch (ev.meta_event_type) {
         case luo9::payload::MetaEventType::Heartbeat:
             // Heartbeat
@@ -67,6 +96,7 @@ void handle_meta_event(const luo9::payload::MetaEventPayload& ev) {
 }
 
 void handle_notice(const luo9::payload::NoticePayload& notice) {
+    DEBUG_LOG(("[plugin_echo] handle_notice: type=" + std::to_string(static_cast<int>(notice.notice_type))).c_str());
     switch (notice.notice_type) {
         case luo9::payload::NoticeType::GroupIncrease:
             // New member
@@ -80,6 +110,7 @@ void handle_notice(const luo9::payload::NoticePayload& notice) {
 }
 
 void handle_task_event(const std::string& json) {
+    DEBUG_LOG(("[plugin_echo] handle_task_event: " + json).c_str());
     // Simple JSON parsing for task event
     auto pos = json.find("\"task_name\"");
     if (pos == std::string::npos) return;
@@ -92,12 +123,13 @@ void handle_task_event(const std::string& json) {
     if (end == std::string::npos) return;
     
     std::string task_name = json.substr(start, end - start);
-    std::cout << "[task] Task triggered: name=" << task_name << std::endl;
+    DEBUG_LOG(("[plugin_echo] Task triggered: name=" + task_name).c_str());
 }
 
 // Task command handlers
 
 void handle_task_start(const std::function<void(const std::string&)>& reply, const std::vector<std::string>& args) {
+    DEBUG_LOG("[plugin_echo] handle_task_start");
     // /task start <name> <sec min hour day month week> [payload]
     if (args.size() < 7) {
         reply("Usage: /task start <name> <sec min hour day month week> [payload]");
@@ -119,12 +151,14 @@ void handle_task_start(const std::function<void(const std::string&)>& reply, con
         }
     }
 
+    DEBUG_LOG(("[plugin_echo] Creating task: name=" + name + " cron=" + cron).c_str());
     std::string req = "{\"action\":\"schedule\",\"task_name\":\"" + name + "\",\"cron\":\"" + cron + "\",\"payload\":\"" + payload + "\"}";
     topic("luo9_task_miso").publish(req);
     reply("Task created: " + name + " [" + cron + "]");
 }
 
 void handle_task_end(const std::function<void(const std::string&)>& reply, const std::vector<std::string>& args) {
+    DEBUG_LOG("[plugin_echo] handle_task_end");
     // /task end <name>
     if (args.empty()) {
         reply("Usage: /task end <name>");
@@ -132,6 +166,7 @@ void handle_task_end(const std::function<void(const std::string&)>& reply, const
     }
 
     std::string name = args[0];
+    DEBUG_LOG(("[plugin_echo] Cancelling task: name=" + name).c_str());
     std::string req = "{\"action\":\"cancel\",\"task_name\":\"" + name + "\"}";
     topic("luo9_task_miso").publish(req);
     reply("Task cancelled: " + name);
